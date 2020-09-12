@@ -352,6 +352,18 @@ describe('src/cy/commands/actions/scroll', () => {
           expect($container.get(0).scrollLeft).to.eq(500)
         })
       })
+
+      // https://github.com/cypress-io/cypress/issues/1924
+      it('skips scrollability check', () => {
+        const scrollTo = cy.spy($.fn, 'scrollTo')
+
+        cy.get('button:first').scrollTo('bottom', { ensureScrollable: false }).then(() => {
+          cy.stub(cy, 'ensureScrollability')
+
+          expect(scrollTo).to.be.calledWithMatch({}, { ensureScrollable: false })
+          expect(cy.ensureScrollability).not.to.be.called
+        })
+      })
     })
 
     describe('assertion verification', () => {
@@ -416,6 +428,9 @@ describe('src/cy/commands/actions/scroll', () => {
       it('throws when subject isn\'t scrollable', (done) => {
         cy.on('fail', (err) => {
           expect(err.message).to.include('`cy.scrollTo()` failed because this element is not scrollable:')
+          expect(err.message).to.include(`\`<button>button</button>\``)
+          expect(err.message).to.include('Make sure you\'re targeting the correct element or use `{ensureScrollable: false}` to disable the scrollable check.')
+          expect(err.docsUrl).to.eq('https://on.cypress.io/scrollto')
 
           done()
         })
@@ -514,6 +529,17 @@ describe('src/cy/commands/actions/scroll', () => {
           })
 
           cy.get('#scroll-to-both').scrollTo('25px', { easing: 'flower' })
+        })
+
+        it('throws if ensureScrollable is not a boolean', (done) => {
+          cy.on('fail', (err) => {
+            expect(err.message).to.include('`cy.scrollTo()` `ensureScrollable` option must be a boolean. You passed: `force`')
+            expect(err.docsUrl).to.eq('https://on.cypress.io/scrollto')
+
+            done()
+          })
+
+          cy.get('button:first').scrollTo('bottom', { ensureScrollable: 'force' })
         })
       })
     })
@@ -770,6 +796,17 @@ describe('src/cy/commands/actions/scroll', () => {
         expect(scrollTo).to.be.calledWithMatch({}, { easing: 'linear' })
         expect(this.scrollBoth.get(0).scrollTop).to.eq(300)
         expect(this.scrollBoth.get(0).scrollLeft).to.eq(300)
+      })
+    })
+
+    describe('shadow dom', () => {
+      beforeEach(() => {
+        cy.visit('/fixtures/shadow-dom.html')
+      })
+
+      // https://github.com/cypress-io/cypress/issues/7986
+      it('does not hang', () => {
+        cy.get('.shadow-1', { includeShadowDom: true }).scrollIntoView()
       })
     })
 

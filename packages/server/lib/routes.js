@@ -1,6 +1,7 @@
 const path = require('path')
 const la = require('lazy-ass')
 const check = require('check-more-types')
+const _ = require('lodash')
 const debug = require('debug')('cypress:server:routes')
 
 const AppData = require('./util/app_data')
@@ -46,7 +47,17 @@ module.exports = ({ app, config, getRemoteState, networkProxy, project, onError 
 
   // routing for the dynamic iframe html
   app.get('/__cypress/iframes/*', (req, res) => {
-    files.handleIframe(req, res, config, getRemoteState)
+    const extraOptions = {
+      specFilter: _.get(project, 'spec.specFilter'),
+    }
+
+    debug('project %o', project)
+    debug('handling iframe for project spec %o', {
+      spec: project.spec,
+      extraOptions,
+    })
+
+    files.handleIframe(req, res, config, getRemoteState, extraOptions)
   })
 
   app.all('/__cypress/xhrs/*', (req, res, next) => {
@@ -73,13 +84,6 @@ module.exports = ({ app, config, getRemoteState, networkProxy, project, onError 
     res.sendFile(file, { etag: false })
   })
 
-  // we've namespaced the initial sending down of our cypress
-  // app as '__'  this route shouldn't ever be used by servers
-  // and therefore should not conflict
-  // ---
-  // TODO: we should additionally send config for the socket.io route, etc
-  // and any other __cypress namespaced files so that the runner does
-  // not have to be aware of anything
   la(check.unemptyString(config.clientRoute), 'missing client route in config', config)
 
   app.get(config.clientRoute, (req, res) => {

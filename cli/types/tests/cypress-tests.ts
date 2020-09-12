@@ -46,6 +46,7 @@ namespace CypressConfigTests {
   Cypress.config({ baseUrl: '.', }) // $ExpectType void
 
   Cypress.config('taskTimeout') // $ExpectType number
+  Cypress.config('includeShadowDom') // $ExpectType boolean
 }
 
 namespace CypressEnvTests {
@@ -75,6 +76,9 @@ namespace CypressCommandsTests {
   })
   Cypress.Commands.add('newCommand', { prevSubject: true }, () => {
     return
+  })
+  Cypress.Commands.add('newCommand', () => {
+    return new Promise((resolve) => {})
   })
   Cypress.Commands.overwrite('newCommand', () => {
     return
@@ -179,6 +183,25 @@ cy.wrap(['bar', 'baz'])
   })
 
 describe('then', () => {
+  // https://github.com/cypress-io/cypress/issues/5575
+  it('should respect the return type of callback', () => {
+    // Expected type is verbose here because the function below matches 2 declarations.
+    // * then<S extends object | any[] | string | number | boolean>(fn: (this: ObjectLike, currentSubject: Subject) => S): Chainable<S>
+    // * then<S>(fn: (this: ObjectLike, currentSubject: Subject) => S): ThenReturn<Subject, S>
+    // For our purpose, it doesn't matter.
+    const result = cy.get('foo').then(el => el.attr('foo'))
+    result // $ExpectType Chainable<JQuery<HTMLElement>> | Chainable<string | JQuery<HTMLElement>>
+
+    const result2 = cy.get('foo').then(el => `${el}`)
+    result2 // $ExpectType Chainable<string>
+
+    const result3 = cy.get('foo').then({ timeout: 1234 }, el => el.attr('foo'))
+    result3 // $ExpectType Chainable<JQuery<HTMLElement>> | Chainable<string | JQuery<HTMLElement>>
+
+    const result4 = cy.get('foo').then({ timeout: 1234 }, el => `${el}`)
+    result4 // $ExpectType Chainable<string>
+  })
+
   it('should have the correct type signature', () => {
     cy.wrap({ foo: 'bar' })
       .then(s => {
@@ -287,6 +310,24 @@ cy
     subject // $ExpectType undefined
   })
 
+namespace CypressAUTWindowTests {
+  cy.go(2).then((win) => {
+    win // $ExpectType AUTWindow
+  })
+
+  cy.reload().then((win) => {
+    win // $ExpectType AUTWindow
+  })
+
+  cy.visit('https://google.com').then(win => {
+    win // $ExpectType AUTWindow
+  })
+
+  cy.window().then(win => {
+    win // $ExpectType AUTWindow
+  })
+}
+
 namespace CypressOnTests {
   Cypress.on('uncaught:exception', (error, runnable) => {
     error // $ExpectType Error
@@ -346,6 +387,10 @@ namespace CypressScreenshotTests {
   })
 }
 
+namespace CypressShadowDomTests {
+  cy.get('my-component').shadow()
+}
+
 namespace CypressTriggerTests {
   cy.get('something')
     .trigger('click') // .trigger(eventName)
@@ -362,8 +407,20 @@ namespace CypressTriggerTests {
     })
 }
 
-const now = new Date(2019, 3, 2).getTime()
-cy.clock(now, ['Date'])
+namespace CypressClockTests {
+  // timestamp
+  cy.clock(new Date(2019, 3, 2).getTime(), ['Date'])
+  // timestamp shortcut
+  cy.clock(+ new Date(), ['Date'])
+  // Date object
+  cy.clock(new Date(2019, 3, 2))
+  // restoring the clock
+  cy.clock().then(clock => {
+    clock.restore()
+  })
+  // restoring the clock shortcut
+  cy.clock().invoke('restore')
+}
 
 namespace CypressContainsTests {
   cy.contains('#app')
@@ -488,6 +545,22 @@ namespace CypressTestConfigOverridesTests {
   it('test', {
     browser: {foo: 'bar'} // $ExpectError
   }, () => {})
+
+  it('test', {
+    retries: null
+  }, () => { })
+  it('test', {
+    retries: 3
+  }, () => { })
+  it('test', {
+    retries: {
+      runMode: 3,
+      openMode: null
+    }
+  }, () => { })
+  it('test', {
+    retries: { run: 3 } // $ExpectError
+  }, () => { })
 
   it.skip('test', {}, () => {})
   it.only('test', {}, () => {})

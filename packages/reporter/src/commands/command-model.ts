@@ -77,6 +77,7 @@ export default class Command extends Instrument {
     this.numElements = props.numElements
     this.renderProps = props.renderProps || {}
     this.visible = props.visible
+    this.timeout = props.timeout
 
     this._checkLongRunning()
   }
@@ -109,9 +110,6 @@ export default class Command extends Instrument {
 
     if (this._becameNonPending()) {
       clearTimeout(this._pendingTimeout as TimeoutID)
-      action('became:inactive', () => {
-        return this.isLongRunning = false
-      })()
     }
 
     this._prevState = this.state

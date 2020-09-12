@@ -28,12 +28,36 @@
     line-height: 18px;
     padding-left: 0;
 
-    .runnable-wrapper:hover {
-      background-color: #f7f8f9;
-      cursor: pointer;
+    .runnable-wrapper {
+      border-left: 5px solid transparent;
+      padding: 0;
+
+      .collapsible-header {
+        &:focus {
+          .collapsible-header-inner {
+            background-color: #f7f8f9;
+            cursor: pointer;
+          }
+        }
+
+        .collapsible-header-inner {
+          &:hover {
+            background-color: #f7f8f9;
+            cursor: pointer;
+          }
+
+          &:focus {
+            outline: 0;
+          }
+
+          height: 100%;
+          padding: 5px 15px 5px 5px;
+          width: 100%;
+        }
+      }
     }
 
-    &.test.hover {
+    .attempt-item:hover {
       > .runnable-wrapper .runnable-controls i.fa-redo {
         visibility: visible !important;
       }
@@ -43,19 +67,13 @@
       }
     }
 
-    &:focus {
-      outline: 1px dotted #6c6c6c;
-      outline-offset: -1px;
-    }
-
     &.runnable-active {
       .runnable-state {
-        @extend .#{$fa-css-prefix}-sync-alt;
-        @extend .#{$fa-css-prefix}-spin;
+        @include runnable-state-active;
       }
     }
 
-    .runnable-state {
+    .runnable-state,.attempt-state {
       display: inline-block;
       line-height: 18px;
       margin-right: 5px;
@@ -71,12 +89,10 @@
       color: #bbbcbd;
     }
 
-    &.test.runnable-processing {
+
+    &.test.runnable-processing  {
       .runnable-state {
-        @extend .far;
-        line-height: 18px; // @extend .far overrides line-height, so we need to set it again
-        @extend .#{$fa-css-prefix}-square;
-        color: #888;
+        @include runnable-state-processing;
       }
     }
 
@@ -92,6 +108,7 @@
     &.runnable-pending > div > .runnable-wrapper,
     &.runnable-pending > div > .runnable-instruments {
       border-left: 5px solid lighten($pending, 25%);
+      padding-bottom: 0;
     }
 
     &.runnable-passed > div > .runnable-wrapper,
@@ -99,10 +116,14 @@
       border-left: 5px solid $pass;
     }
 
+    .runnable-retried > div > .runnable-wrapper,
+    .runnable-retried > div > .runnable-instruments {
+      border-left: 5px solid $retried;
+    }
+
     &.runnable-skipped > .runnable-wrapper {
       .runnable-state {
-        @extend .#{$fa-css-prefix}-ban;
-        color: #888;
+        @include runnable-state-skipped;
       }
 
       .runnable-title {
@@ -117,8 +138,7 @@
 
     &.test.runnable-failed {
       .runnable-state {
-        @extend .#{$fa-css-prefix}-times;
-        color: $fail;
+        @include runnable-state-failed;
       }
     }
 
@@ -130,44 +150,18 @@
       }
     }
 
-    > div > .runnable-wrapper {
-      .collapsible-header:focus, .collapsible-header-inner:focus, .collapsible-header-text:focus {
-        outline: 0;
-
-        .runnable-title {
-          outline: 1px dotted;
-        }
-      }
-    }
-
-    &.test > div > .runnable-wrapper {
-      .collapsible-header:focus, .collapsible-header-inner:focus, .collapsible-header-text:focus {
-        outline: 0;
-
-        .runnable-title {
-          outline: 0;
-          > span:first-child {
-            outline: 1px dotted;
-          }
-        }
-      }
-    }
-
     &.test.runnable-passed {
       .runnable-state {
-        @extend .#{$fa-css-prefix}-check;
-        color: $pass;
+        @include runnable-state-passed;
       }
     }
 
     &.test.runnable-pending {
+      .runnable-state {
+        @include runnable-state-pending;
+      }
       .runnable-title {
         color: lighten($pending, 25%);
-      }
-
-      .runnable-state {
-        @extend .#{$fa-css-prefix}-circle-notch;
-        color: lighten($pending, 20%);
       }
 
       .runnable-commands-region {
@@ -176,22 +170,8 @@
     }
   }
 
-  .runnable-wrapper {
-    padding: 5px 15px 5px 5px;
-    overflow: hidden;
-    border-left: 5px solid transparent;
-  }
-
   .runnable-instruments {
     border-left: 5px solid transparent;
-  }
-
-  .collapsible > .runnable-wrapper {
-    padding: 0;
-
-    .collapsible-header {
-      padding: 5px 15px 5px 5px;
-    }
   }
 
   .collapsible > .runnable-instruments {

@@ -15,12 +15,13 @@ const compression = require('compression')
 const debug = require('debug')('cypress:server:server')
 const {
   agent,
-  blacklist,
+  blocked,
   concatStream,
   cors,
   uri,
 } = require('@packages/network')
 const { NetworkProxy } = require('@packages/proxy')
+const { netStubbingState } = require('@packages/net-stubbing')
 const { createInitialWorkers } = require('@packages/rewriter')
 const origin = require('./util/origin')
 const ensureUrl = require('./util/ensure-url')
@@ -28,7 +29,7 @@ const appData = require('./util/app_data')
 const statusCode = require('./util/status_code')
 const headersUtil = require('./util/headers')
 const allowDestroy = require('./util/server_destroy')
-const { SocketWhitelist } = require('./util/socket_whitelist')
+const { SocketAllowed } = require('./util/socket_allowed')
 const errors = require('./errors')
 const logger = require('./logger')
 const Socket = require('./socket')
@@ -59,7 +60,7 @@ const _forceProxyMiddleware = function (clientRoute) {
     const trimmedUrl = _.trimEnd(req.proxiedUrl, '/')
 
     if (_isNonProxiedRequest(req) && !ALLOWED_PROXY_BYPASS_URLS.includes(trimmedUrl) && (trimmedUrl !== trimmedClientRoute)) {
-      // this request is non-proxied and non-whitelisted, redirect to the runner error page
+      // this request is non-proxied and non-allowed, redirect to the runner error page
       return res.redirect(clientRoute)
     }
 
@@ -115,7 +116,7 @@ class Server {
       return new Server()
     }
 
-    this._socketWhitelist = new SocketWhitelist()
+    this._socketAllowed = new SocketAllowed()
     this._request = null
     this._middleware = null
     this._server = null
@@ -200,16 +201,13 @@ class Server {
       // TODO: does not need to be an instance anymore
       this._request = Request()
       this._nodeProxy = httpProxy.createProxyServer()
+      this._socket = new Socket(config)
 
       const getRemoteState = () => {
         return this._getRemoteState()
       }
 
-      const getFileServerToken = () => {
-        return this._fileServer.token
-      }
-
-      this._networkProxy = new NetworkProxy({ config, getRemoteState, getFileServerToken, request: this._request })
+      this.createNetworkProxy(config, getRemoteState)
 
       if (config.experimentalSourceRewriting) {
         createInitialWorkers()
@@ -230,6 +228,22 @@ class Server {
     })
   }
 
+  createNetworkProxy (config, getRemoteState) {
+    const getFileServerToken = () => {
+      return this._fileServer.token
+    }
+
+    this._netStubbingState = netStubbingState()
+    this._networkProxy = new NetworkProxy({
+      socket: this._socket,
+      netStubbingState: this._netStubbingState,
+      config,
+      getRemoteState,
+      getFileServerToken,
+      request: this._request,
+    })
+  }
+
   createHosts (hosts = {}) {
     return _.each(hosts, (ip, host) => {
       return evilDns.add(host, ip)
@@ -238,7 +252,7 @@ class Server {
 
   createServer (app, config, project, request, onWarning) {
     return new Promise((resolve, reject) => {
-      const { port, fileServerFolder, socketIoRoute, baseUrl, blacklistHosts } = config
+      const { port, fileServerFolder, socketIoRoute, baseUrl, blockHosts } = config
 
       this._server = http.createServer(app)
 
@@ -276,7 +290,7 @@ class Server {
       this._server.on('connect', (req, socket, head) => {
         debug('Got CONNECT request from %s', req.url)
 
-        socket.once('upstream-connected', this._socketWhitelist.add)
+        socket.once('upstream-connected', this._socketAllowed.add)
 
         return this._httpsProxy.connect(req, socket, head, {
           onDirectConnection: (req) => {
@@ -291,16 +305,17 @@ class Server {
             // if we are currently matching then we're
             // not making a direct connection anyway
             // so we only need to check this if we
-            // have blacklist hosts and are not matching.
+            // have blocked hosts and are not matching.
             //
-            // if we have blacklisted hosts lets
+            // if we have blocked hosts lets
             // see if this matches - if so then
             // we cannot allow it to make a direct
             // connection
-            if (blacklistHosts && !isMatching) {
-              isMatching = blacklist.matches(urlToCheck, blacklistHosts)
 
-              debug(`HTTPS request ${urlToCheck} matches blacklist?`, isMatching)
+            if (blockHosts && !isMatching) {
+              isMatching = blocked.matches(urlToCheck, blockHosts)
+
+              debug(`HTTPS request ${urlToCheck} matches blockHosts?`, isMatching)
             }
 
             // make a direct connection only if
@@ -655,6 +670,15 @@ class Server {
         },
       })
 
+      if (options.selfProxy) {
+        // TODO: this is being used to force cy.visits to be interceptable by network stubbing
+        // however, network errors will be obsfucated by the proxying so this is not an ideal solution
+        _.assign(options, {
+          proxy: `http://127.0.0.1:${this._port()}`,
+          agent: null,
+        })
+      }
+
       debug('sending request with options %o', options)
 
       return runPhase(() => {
@@ -759,7 +783,7 @@ class Server {
     let host; let remoteOrigin
 
     if (req.url.startsWith(socketIoRoute)) {
-      if (!this._socketWhitelist.isRequestWhitelisted(req)) {
+      if (!this._socketAllowed.isRequestAllowed(req)) {
         socket.write('HTTP/1.1 400 Bad Request\r\n\r\nRequest not made via a Cypress-launched browser.')
         socket.end()
       }
@@ -864,12 +888,13 @@ class Server {
   startWebsockets (automation, config, options = {}) {
     options.onResolveUrl = this._onResolveUrl.bind(this)
     options.onRequest = this._onRequest.bind(this)
+    options.netStubbingState = this._netStubbingState
 
     options.onResetServerState = () => {
-      return this._networkProxy.reset()
+      this._networkProxy.reset()
+      this._netStubbingState.reset()
     }
 
-    this._socket = new Socket(config)
     this._socket.startListening(this._server, automation, config, options)
 
     return this._normalizeReqUrl(this._server)

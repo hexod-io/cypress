@@ -8,6 +8,7 @@ const { getCommandLogWithText,
   shouldBeCalled,
   shouldBeCalledOnce,
   shouldNotBeCalled,
+  expectCaret,
 } = require('../../../support/utils')
 
 const fail = function (str) {
@@ -800,53 +801,20 @@ describe('src/cy/commands/actions/click', () => {
     it('places cursor at the end of [contenteditable]', () => {
       cy.get('[contenteditable]:first')
       .invoke('html', '<div><br></div>').click()
-      .then(($el) => {
-        const range = $el.get(0).ownerDocument.getSelection().getRangeAt(0)
-
-        expect(range.startContainer.outerHTML).to.eql('<div><br></div>')
-        expect(range.startOffset).to.eql(0)
-        expect(range.endContainer.outerHTML).to.eql('<div><br></div>')
-
-        expect(range.endOffset).to.eql(0)
-      })
+      .then(expectCaret(0))
 
       cy.get('[contenteditable]:first')
       .invoke('html', 'foo').click()
-      .then(($el) => {
-        const range = $el.get(0).ownerDocument.getSelection().getRangeAt(0)
-
-        expect(range.startContainer.nodeValue).to.eql('foo')
-        expect(range.startOffset).to.eql(3)
-        expect(range.endContainer.nodeValue).to.eql('foo')
-
-        expect(range.endOffset).to.eql(3)
-      })
+      .then(expectCaret(3))
 
       cy.get('[contenteditable]:first')
       .invoke('html', '<div>foo</div>').click()
-      .then(($el) => {
-        const range = $el.get(0).ownerDocument.getSelection().getRangeAt(0)
-
-        expect(range.startContainer.nodeValue).to.eql('foo')
-        expect(range.startOffset).to.eql(3)
-        expect(range.endContainer.nodeValue).to.eql('foo')
-
-        expect(range.endOffset).to.eql(3)
-      })
+      .then(expectCaret(3))
 
       cy.get('[contenteditable]:first')
-      // firefox: prevent contenteditable from disappearing (dont set to empty)
+      // firefox headless: prevent contenteditable from disappearing (dont set to empty)
       .invoke('html', '<br>').click()
-      .then(($el) => {
-        const el = $el.get(0)
-        const range = el.ownerDocument.getSelection().getRangeAt(0)
-
-        expect(range.startContainer).to.eql(el)
-        expect(range.startOffset).to.eql(0)
-        expect(range.endContainer).to.eql(el)
-
-        expect(range.endOffset).to.eql(0)
-      })
+      .then(expectCaret(0))
     })
 
     it('can click SVG elements', () => {
@@ -879,6 +847,105 @@ describe('src/cy/commands/actions/click', () => {
 
       cy.get('#canvas').click().then(() => {
         expect(onClick).to.be.calledOnce
+      })
+    })
+
+    describe('modifier options', () => {
+      beforeEach(() => {
+        cy.visit('/fixtures/issue-486.html')
+      })
+
+      it('ctrl', () => {
+        cy.get('#button').click({
+          ctrlKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Ctrl}')
+
+        // ctrl should be released
+        cy.get('#button').click()
+        cy.get('#result').should('not.contain', '{Ctrl}')
+
+        cy.get('#button').click({
+          controlKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Ctrl}')
+      })
+
+      it('alt', () => {
+        cy.get('#button').click({
+          altKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Alt}')
+
+        // alt should be released
+        cy.get('#button').click()
+        cy.get('#result').should('not.contain', '{Alt}')
+
+        cy.get('#button').click({
+          optionKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Alt}')
+      })
+
+      it('shift', () => {
+        cy.get('#button').click({
+          shiftKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Shift}')
+
+        // shift should be released
+        cy.get('#button').click()
+        cy.get('#result').should('not.contain', '{Shift}')
+      })
+
+      it('meta', () => {
+        cy.get('#button').click({
+          metaKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Meta}')
+
+        // shift should be released
+        cy.get('#button').click()
+        cy.get('#result').should('not.contain', '{Meta}')
+
+        cy.get('#button').click({
+          commandKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Meta}')
+
+        cy.get('#button').click({
+          cmdKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Meta}')
+      })
+
+      it('multiple', () => {
+        cy.get('#button').click({
+          ctrlKey: true,
+          altKey: true,
+          shiftKey: true,
+          metaKey: true,
+        })
+
+        cy.get('#result').should('contain', '{Ctrl}')
+        cy.get('#result').should('contain', '{Alt}')
+        cy.get('#result').should('contain', '{Shift}')
+        cy.get('#result').should('contain', '{Meta}')
+
+        // modifiers should be released
+        cy.get('#button').click()
+        cy.get('#result').should('not.contain', '{Ctrl}')
+        cy.get('#result').should('not.contain', '{Alt}')
+        cy.get('#result').should('not.contain', '{Shift}')
+        cy.get('#result').should('not.contain', '{Meta}')
       })
     })
 
@@ -3707,9 +3774,13 @@ describe('shadow dom', () => {
     .rightclick()
   })
 
+  it('focuses the correct ancestor when it is outside shadow dom', () => {
+    cy.get('.inside-focusable', { includeShadowDom: true }).click()
+    cy.get('.focusable').should('be.focused')
+  })
+
   // https://github.com/cypress-io/cypress/issues/7679
-  it('does not hang when experimentalShadowDomSupport is false and clicking on custom element', () => {
-    Cypress.config('experimentalShadowDomSupport', false)
+  it('does not hang when clicking on custom element', () => {
     // needs some size or it's considered invisible and click will fail its prerequisites
     // so we make it display: block so its getClientRects() contains only a single
     cy.$$('#shadow-element-1').css({ display: 'block' })

@@ -70,6 +70,9 @@ const getPrimaryTab = Bluebird.method((browser) => {
 })
 
 const attachToTabMemory = Bluebird.method((tab) => {
+  // TODO: figure out why tab.memory is sometimes undefined
+  if (!tab.memory) return
+
   if (tab.memory.isAttached) {
     return
   }
@@ -177,11 +180,18 @@ export default {
 
     const { browser } = foxdriver
 
+    browser.on('error', (err) => {
+      debug('received error from foxdriver connection, ignoring %o', err)
+    })
+
     forceGcCc = () => {
       let gcDuration; let ccDuration
 
       const gc = (tab) => {
         return () => {
+          // TODO: figure out why tab.memory is sometimes undefined
+          if (!tab.memory) return
+
           let start = Date.now()
 
           return tab.memory.forceGarbageCollection()
@@ -194,6 +204,9 @@ export default {
 
       const cc = (tab) => {
         return () => {
+          // TODO: figure out why tab.memory is sometimes undefined
+          if (!tab.memory) return
+
           let start = Date.now()
 
           return tab.memory.forceCycleCollection()

@@ -26,6 +26,7 @@ const driverToSocketEvents = 'backend:request automation:request mocha recorder:
 const driverTestEvents = 'test:before:run:async test:after:run'.split(' ')
 const driverToLocalEvents = 'viewport:changed config stop url:changed page:loading visit:failed'.split(' ')
 const socketRerunEvents = 'runner:restart watched:file:changed'.split(' ')
+const socketToDriverEvents = 'net:event'.split(' ')
 
 const localBus = new EventEmitter()
 const reporterBus = new EventEmitter()
@@ -53,6 +54,12 @@ const eventManager = {
 
   addGlobalListeners (state, connectionInfo) {
     const rerun = () => {
+      if (!this) {
+        // if the tests have been reloaded
+        // then nothing to rerun
+        return
+      }
+
       return this._reRun(state)
     }
 
@@ -81,6 +88,12 @@ const eventManager = {
 
     _.each(socketRerunEvents, (event) => {
       ws.on(event, rerun)
+    })
+
+    _.each(socketToDriverEvents, (event) => {
+      ws.on(event, (...args) => {
+        Cypress.emit(event, ...args)
+      })
     })
 
     const logCommand = (logId) => {
@@ -227,6 +240,11 @@ const eventManager = {
         // get the current runnable in case we reran mid-test due to a visit
         // to a new domain
         ws.emit('get:existing:run:state', (state = {}) => {
+          if (!Cypress.runner) {
+            // the tests have been reloaded
+            return
+          }
+
           const runnables = Cypress.runner.normalizeAll(state.tests)
           const run = () => {
             performance.mark('initialize-end')

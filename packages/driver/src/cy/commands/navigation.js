@@ -17,7 +17,7 @@ let hasVisitedAboutBlank = null
 let currentlyVisitingAboutBlank = null
 let knownCommandCausedInstability = null
 
-const REQUEST_URL_OPTS = 'auth failOnStatusCode retryOnNetworkFailure retryOnStatusCodeFailure method body headers'
+const REQUEST_URL_OPTS = 'auth failOnStatusCode retryOnNetworkFailure retryOnStatusCodeFailure method body headers selfProxy'
 .split(' ')
 
 const VISIT_OPTS = 'url log onBeforeLoad onLoad timeout requestTimeout'
@@ -842,6 +842,9 @@ module.exports = (Commands, Cypress, cy, state, config) => {
         if (previousDomainVisited && (remote.originPolicy !== existing.originPolicy)) {
           // if we've already visited a new superDomain
           // then die else we'd be in a terrible endless loop
+          // we also need to disable retries to prevent the endless loop
+          $utils.getTestFromRunnable(state('runnable'))._retries = 0
+
           return cannotVisitDifferentOrigin(remote.origin, previousDomainVisited, remote, existing, options._log)
         }
 
@@ -872,6 +875,11 @@ module.exports = (Commands, Cypress, cy, state, config) => {
         if (existingAuth) {
           // strip out the existing url if we have one
           url = url.replace(`${existingAuth}@`, '')
+        }
+
+        // hack to make cy.visits interceptable by network stubbing
+        if (Cypress.config('experimentalNetworkStubbing')) {
+          options.selfProxy = true
         }
 
         return requestUrl(url, options)
